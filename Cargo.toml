@@ -1,0 +1,8 @@
+[package]
+name = "orderbook-rust"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust_decimal = "1.37.2"
+itchy = "0.3"

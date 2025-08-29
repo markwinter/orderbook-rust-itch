@@ -1,0 +1,4 @@
+.DS_Store
+*.NASDAQ_ITCH50
+/target
+*.gz
