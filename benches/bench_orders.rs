@@ -7,10 +7,9 @@ use std::hint::black_box;
 pub fn bench_add_order(c: &mut Criterion) {
     let mut rng = rand::rng();
     let mut next_id: u64 = 0;
+    let mut ob = OrderBook::new();
 
     c.bench_function("add_order", |b| {
-        let mut ob = OrderBook::new();
-
         b.iter_batched(
             || {
                 let id = {
@@ -20,7 +19,7 @@ pub fn bench_add_order(c: &mut Criterion) {
                 };
                 let price = Decimal::new(rng.random_range(330..380), 2);
                 let volume = rng.random_range(1..10000);
-                let side = if rng.random_bool(0.5) {
+                let side = if rng.random_bool(0.7) {
                     OrderSide::Buy
                 } else {
                     OrderSide::Sell
@@ -38,6 +37,8 @@ pub fn bench_add_order(c: &mut Criterion) {
             BatchSize::SmallInput,
         )
     });
+
+    dbg!(ob.meta());
 }
 
 criterion_group!(benches, bench_add_order);

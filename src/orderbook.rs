@@ -44,13 +44,21 @@ pub struct OrderBook {
 impl OrderBook {
     pub fn new() -> Self {
         OrderBook {
-            bids: Vec::new(),
-            asks: Vec::new(),
-            price_levels: Slab::with_capacity(2048),
-            orders: Slab::with_capacity(100000),
-
-            order_map: OrderMap::new(200000),
+            bids: Vec::with_capacity(100),
+            asks: Vec::with_capacity(100),
+            price_levels: Slab::with_capacity(100),
+            orders: Slab::with_capacity(50_000_000),
+            order_map: OrderMap::new(50_000_000),
         }
+    }
+
+    pub fn meta(&self) -> (usize, usize, usize, usize) {
+        (
+            self.bids.len(),
+            self.asks.len(),
+            self.price_levels.len(),
+            self.orders.len(),
+        )
     }
 
     pub fn best_bid(&self) -> Option<Decimal> {
