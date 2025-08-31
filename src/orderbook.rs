@@ -130,12 +130,11 @@ impl OrderBook {
             plevel.volume += volume;
             order.price_level = plevel_idx;
         } else {
-            let new_plevel = PriceLevel {
+            let new_plevel_idx = self.price_levels.insert(PriceLevel {
                 price,
                 depth: 1,
                 volume,
-            };
-            let new_plevel_idx = self.price_levels.insert(new_plevel);
+            });
 
             order.price_level = new_plevel_idx;
             list.insert(insertion_idx, new_plevel_idx);
@@ -149,59 +148,54 @@ impl OrderBook {
         let order = self.orders.get_mut(*order_slab_idx).unwrap();
         order.volume -= volume;
 
-        let plevel = self.price_levels.get_mut(order.price_level).unwrap();
+        let plevel_slab_idx = order.price_level;
+        let plevel = self.price_levels.get_mut(plevel_slab_idx).unwrap();
         plevel.volume -= volume;
 
         if order.volume == 0 {
-            // Now dead order, remove
             plevel.depth -= 1;
+            self.orders.remove(*order_slab_idx);
         }
 
-        if plevel.volume == 0 {
-            // Now dead level, remove
-        }
+        //if plevel.volume == 0 {
+        //    self.price_levels.remove(plevel_slab_idx);
+        //}
     }
 
     pub fn cancel_order(&mut self, order_id: u64, volume: u64) {
-        // Get price level for order
-        // Have to lookup because it doesn't have original price obv
-        // Order -> PriceLevel
-        // Deduct the volume from the PriceLevel
         let order_slab_idx = self.order_map.get(order_id).unwrap();
         let order = self.orders.get_mut(*order_slab_idx).unwrap();
         order.volume -= volume;
 
-        let plevel = self.price_levels.get_mut(order.price_level).unwrap();
+        let plevel_slab_idx = order.price_level;
+        let plevel = self.price_levels.get_mut(plevel_slab_idx).unwrap();
         plevel.volume -= volume;
 
         if order.volume == 0 {
-            // Now dead order, remove
             plevel.depth -= 1;
+
+            self.orders.remove(*order_slab_idx);
         }
 
-        if plevel.volume == 0 {
-            // Now dead level, remove
-        }
+        //if plevel.volume == 0 {
+        //    self.price_levels.remove(plevel_slab_idx);
+        //}
     }
 
     pub fn delete_order(&mut self, order_id: u64) {
-        // Get price level for order
-        // Have to lookup because it doesn't have original price obv
-        // Order -> PriceLevel
-        // Deduct the order's volume from PriceLevel
-        // Need to store Order Volume
         let order_slab_idx = self.order_map.get(order_id).unwrap();
         let order = self.orders.get_mut(*order_slab_idx).unwrap();
 
-        let plevel = self.price_levels.get_mut(order.price_level).unwrap();
+        let plevel_slab_idx = order.price_level;
+        let plevel = self.price_levels.get_mut(plevel_slab_idx).unwrap();
         plevel.volume -= order.volume;
         plevel.depth -= 1;
 
-        // Order now dead, remove it
+        self.orders.remove(*order_slab_idx);
 
-        if plevel.volume == 0 {
-            // Now dead level, remove
-        }
+        //if plevel.volume == 0 {
+        //    self.price_levels.remove(plevel_slab_idx);
+        //}
     }
 
     pub fn replace_order(

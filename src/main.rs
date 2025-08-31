@@ -1,7 +1,7 @@
+use clap::Parser;
 use std::collections::HashMap;
 
-use itchy::ArrayString8;
-use orderbook_rust::orderbook::OrderSide;
+use orderbook_rust::orderbook::{OrderBook, OrderSide};
 
 const ORDER_ADD: u8 = b'A';
 const ORDER_ADD_ATTRIBUTED: u8 = b'F';
@@ -12,17 +12,25 @@ const ORDER_DELETE: u8 = b'D';
 const ORDER_REPLACE: u8 = b'U';
 const STOCK_DIRECTORY: u8 = b'R';
 
+#[derive(Parser)]
+struct Args {
+    file: String,
+    symbol: String,
+}
+
 fn main() {
-    let stream = itchy::MessageStream::from_file("01302020.NASDAQ_ITCH50").unwrap();
+    let args = Args::parse();
 
-    let mut stock_directory: HashMap<ArrayString8, u16> = HashMap::with_capacity(5000);
+    let stream = itchy::MessageStream::from_file(args.file).unwrap();
 
-    let mut book = orderbook_rust::orderbook::OrderBook::new();
+    let mut stock_directory: HashMap<String, u16> = HashMap::with_capacity(5000);
+
+    let mut book = OrderBook::new();
 
     let mut processed = 0;
 
     for msg in stream {
-        if processed > 100 {
+        if processed > 10000 {
             dbg!(&book.spread());
             dbg!(&book.best_bid());
             dbg!(&book.best_ask());
@@ -36,10 +44,12 @@ fn main() {
                     continue;
                 };
 
-                stock_directory.insert(dir.stock, m.stock_locate);
+                let stock = dir.stock.trim_end().to_lowercase();
+
+                stock_directory.insert(stock, m.stock_locate);
             }
             ORDER_ADD | ORDER_ADD_ATTRIBUTED => {
-                let aapl = stock_directory["AAPL    "];
+                let aapl = stock_directory[&args.symbol];
                 if m.stock_locate != aapl {
                     continue;
                 }
@@ -64,7 +74,7 @@ fn main() {
                 );
             }
             ORDER_EXECUTED => {
-                let aapl = stock_directory["AAPL    "];
+                let aapl = stock_directory[&args.symbol];
                 if m.stock_locate != aapl {
                     continue;
                 }
@@ -81,7 +91,7 @@ fn main() {
                 book.execute_order(reference, executed as u64);
             }
             ORDER_EXECUTED_PRICE => {
-                let aapl = stock_directory["AAPL    "];
+                let aapl = stock_directory[&args.symbol];
                 if m.stock_locate != aapl {
                     continue;
                 }
@@ -103,7 +113,7 @@ fn main() {
                 book.execute_order(reference, executed as u64);
             }
             ORDER_CANCEL => {
-                let aapl = stock_directory["AAPL    "];
+                let aapl = stock_directory[&args.symbol];
                 if m.stock_locate != aapl {
                     continue;
                 }
@@ -118,7 +128,7 @@ fn main() {
                 book.cancel_order(reference, cancelled as u64);
             }
             ORDER_DELETE => {
-                let aapl = stock_directory["AAPL    "];
+                let aapl = stock_directory[&args.symbol];
                 if m.stock_locate != aapl {
                     continue;
                 }
@@ -130,7 +140,7 @@ fn main() {
                 book.delete_order(reference);
             }
             ORDER_REPLACE => {
-                let aapl = stock_directory["AAPL    "];
+                let aapl = stock_directory[&args.symbol];
                 if m.stock_locate != aapl {
                     continue;
                 }
