@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 rust_decimal = "1.37.2"
 itchy = "0.3"
+slab = "0.4.11"

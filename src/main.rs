@@ -1,6 +1,7 @@
-use orderbook_rust::orderbook::{OrderEntry, OrderSide};
-use rust_decimal::prelude::FromPrimitive;
-use rust_decimal::Decimal;
+use std::collections::HashMap;
+
+use itchy::ArrayString8;
+use orderbook_rust::orderbook::OrderSide;
 
 const ORDER_ADD: u8 = b'A';
 const ORDER_ADD_ATTRIBUTED: u8 = b'F';
@@ -12,70 +13,140 @@ const ORDER_REPLACE: u8 = b'U';
 const STOCK_DIRECTORY: u8 = b'R';
 
 fn main() {
-    let mut processed_orders = 0;
-
-    let mut book = orderbook_rust::orderbook::OrderBook::new(Decimal::from_f64(0.01).unwrap());
-
-    let mut aapl_stock_directory_id = 0;
-
     let stream = itchy::MessageStream::from_file("01302020.NASDAQ_ITCH50").unwrap();
-    for msg in stream {
-        if processed_orders > 100000 {
-            break;
-        }
 
+    let mut stock_directory: HashMap<ArrayString8, u16> = HashMap::with_capacity(5000);
+
+    let mut book = orderbook_rust::orderbook::OrderBook::new();
+
+    let mut processed = 0;
+
+    for msg in stream {
+        if processed > 100 {
+            dbg!(&book.spread());
+            dbg!(&book.best_bid());
+            dbg!(&book.best_ask());
+            return;
+        }
         let m = msg.unwrap();
 
-        if m.tag == STOCK_DIRECTORY && aapl_stock_directory_id == 0 {
-            if let itchy::Body::StockDirectory(dir) = &m.body {
-                if *dir.stock == *"AAPL    " {
-                    aapl_stock_directory_id = m.stock_locate;
-                    println!("found AAPL stock id: {aapl_stock_directory_id}");
-                }
+        match m.tag {
+            STOCK_DIRECTORY => {
+                let itchy::Body::StockDirectory(dir) = &m.body else {
+                    continue;
+                };
+
+                stock_directory.insert(dir.stock, m.stock_locate);
             }
-            continue;
-        }
+            ORDER_ADD | ORDER_ADD_ATTRIBUTED => {
+                let aapl = stock_directory["AAPL    "];
+                if m.stock_locate != aapl {
+                    continue;
+                }
 
-        if m.stock_locate != aapl_stock_directory_id {
-            continue;
-        }
+                processed += 1;
 
-        if m.tag == ORDER_EXECUTED {
-            dbg!(&m);
-            continue;
-        }
+                let itchy::Body::AddOrder(order) = &m.body else {
+                    continue;
+                };
 
-        if m.tag != ORDER_ADD {
-            continue;
-        }
-
-        if let itchy::Body::AddOrder(order) = &m.body {
-            processed_orders += 1;
-
-            let p: rust_decimal::Decimal = order.price.into();
-
-            //println!(
-            //    " = {},{}, {} = ",
-            //    order.price.raw(),
-            //    rust_decimal::Decimal::from(105),
-            //    p,
-            //);
-
-            book.add_limit_order(OrderEntry {
-                quantity: order.shares as u64,
-                price: order.price.into(),
-                order_side: if order.side == itchy::Side::Buy {
+                let side = if order.side == itchy::Side::Buy {
                     OrderSide::Buy
                 } else {
                     OrderSide::Sell
-                },
-            });
+                };
+
+                book.add_order(
+                    order.reference,
+                    order.price.into(),
+                    order.shares as u64,
+                    side,
+                );
+            }
+            ORDER_EXECUTED => {
+                let aapl = stock_directory["AAPL    "];
+                if m.stock_locate != aapl {
+                    continue;
+                }
+
+                let itchy::Body::OrderExecuted {
+                    reference,
+                    executed,
+                    ..
+                } = m.body
+                else {
+                    continue;
+                };
+
+                book.execute_order(reference, executed as u64);
+            }
+            ORDER_EXECUTED_PRICE => {
+                let aapl = stock_directory["AAPL    "];
+                if m.stock_locate != aapl {
+                    continue;
+                }
+
+                let itchy::Body::OrderExecutedWithPrice {
+                    reference,
+                    executed,
+                    printable,
+                    ..
+                } = m.body
+                else {
+                    continue;
+                };
+
+                if !printable {
+                    continue;
+                }
+
+                book.execute_order(reference, executed as u64);
+            }
+            ORDER_CANCEL => {
+                let aapl = stock_directory["AAPL    "];
+                if m.stock_locate != aapl {
+                    continue;
+                }
+
+                let itchy::Body::OrderCancelled {
+                    reference,
+                    cancelled,
+                } = m.body
+                else {
+                    continue;
+                };
+                book.cancel_order(reference, cancelled as u64);
+            }
+            ORDER_DELETE => {
+                let aapl = stock_directory["AAPL    "];
+                if m.stock_locate != aapl {
+                    continue;
+                }
+
+                let itchy::Body::DeleteOrder { reference } = m.body else {
+                    continue;
+                };
+
+                book.delete_order(reference);
+            }
+            ORDER_REPLACE => {
+                let aapl = stock_directory["AAPL    "];
+                if m.stock_locate != aapl {
+                    continue;
+                }
+
+                let itchy::Body::ReplaceOrder(order) = &m.body else {
+                    continue;
+                };
+
+                book.replace_order(
+                    order.old_reference,
+                    order.new_reference,
+                    order.price.into(),
+                    order.shares as u64,
+                );
+            }
+            _ => continue,
         }
-
-        //println!("{m:?}",);
     }
-
-    //for (i, p) in book.price_levels.iter().enumerate() {
-    //    println!("{},{},{}", i, p.quantity, p.depth);
-    //}
 }

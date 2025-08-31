@@ -1,232 +1,221 @@
-use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
-use rust_decimal::Decimal;
-use std::collections::HashMap;
+mod ordermap;
 
-const MAX_PRICE_LEVELS: usize = 10000000;
+use ordermap::OrderMap;
+use rust_decimal::Decimal;
+use slab::Slab;
 
 #[derive(Debug)]
+pub struct Order {
+    pub id: u64,
+    pub side: OrderSide,
+    pub price: Decimal,
+    pub volume: u64,
+
+    // The price_level (Slab index) this order is stored at
+    price_level: usize,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum OrderSide {
     Buy,
     Sell,
 }
 
-pub enum OrderResult {
-    Filled,
-    PartialFill(u64),
-}
-
 #[derive(Debug)]
-pub struct Order {
-    order_id: u64,
+struct PriceLevel {
     price: Decimal,
-    pub quantity: u64,
-    order_side: OrderSide,
+    depth: usize,
+    volume: u64,
 }
 
-pub struct OrderEntry {
-    pub price: Decimal,
-    pub quantity: u64,
-    pub order_side: OrderSide,
-}
-
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct OrderBook {
-    current_order_id: u64,
-    pub price_levels: Box<[PriceLevel]>,
-    order_id_lookup: HashMap<u64, (Decimal, usize)>,
+    // Smallest -> Largest
+    bids: Vec<usize>,
+    // Largest -> Smallest
+    asks: Vec<usize>,
 
-    // ask_min and bid_max are converted to ticks
-    ask_min: Decimal,
-    bid_max: Decimal,
+    price_levels: Slab<PriceLevel>,
+    orders: Slab<Order>,
 
-    tick_size: Decimal,
-}
-
-#[derive(Debug)]
-pub struct PriceLevel {
-    pub orders: Vec<Order>,
-    pub quantity: u64,
-    pub depth: u64,
-}
-
-impl PriceLevel {
-    fn new() -> PriceLevel {
-        PriceLevel {
-            orders: Vec::new(),
-            depth: 0,
-            quantity: 0,
-        }
-    }
-}
-
-impl Default for OrderBook {
-    fn default() -> Self {
-        OrderBook::new(Decimal::from_f32(0.01).unwrap())
-    }
+    order_map: OrderMap,
 }
 
 impl OrderBook {
-    pub fn new(tick_size: Decimal) -> OrderBook {
+    pub fn new() -> Self {
         OrderBook {
-            current_order_id: 0,
-            price_levels: (0..MAX_PRICE_LEVELS)
-                .map(|_| PriceLevel::new())
-                .collect::<Vec<_>>()
-                .into_boxed_slice(),
-            order_id_lookup: HashMap::new(),
+            bids: Vec::new(),
+            asks: Vec::new(),
+            price_levels: Slab::with_capacity(2048),
+            orders: Slab::with_capacity(100000),
 
-            ask_min: Decimal::from(100000000),
-            bid_max: Decimal::ZERO,
-
-            tick_size,
+            order_map: OrderMap::new(200000),
         }
     }
 
-    pub fn bid_max(&self) -> Decimal {
-        self.bid_max * self.tick_size
+    pub fn best_bid(&self) -> Option<Decimal> {
+        let highest_bid_idx = self.bids.last()?;
+        let highest_bid = self.price_levels.get(*highest_bid_idx)?;
+        Some(highest_bid.price)
     }
 
-    pub fn ask_min(&self) -> Decimal {
-        self.ask_min * self.tick_size
+    pub fn best_ask(&self) -> Option<Decimal> {
+        let lowest_ask_idx = self.asks.last()?;
+        let lowest_ask = self.price_levels.get(*lowest_ask_idx)?;
+        Some(lowest_ask.price)
     }
 
-    pub fn add_limit_order(&mut self, order: OrderEntry) -> OrderResult {
-        let new_order_id = self.current_order_id;
-        self.current_order_id += 1;
+    pub fn spread(&self) -> Option<Decimal> {
+        let lowest_ask_idx = self.asks.last()?;
+        let highest_bid_idx = self.bids.last()?;
 
-        let order = Order {
-            order_id: new_order_id,
-            price: order.price,
-            quantity: order.quantity,
-            order_side: order.order_side,
+        let lowest_ask = self.price_levels.get(*lowest_ask_idx)?;
+        let highest_bid = self.price_levels.get(*highest_bid_idx)?;
+
+        lowest_ask.price.checked_sub(highest_bid.price)
+    }
+
+    // volume and depth for a plevel
+    // volume and depth between plevels
+
+    pub fn add_order(&mut self, id: u64, price: Decimal, volume: u64, side: OrderSide) {
+        let list = if side == OrderSide::Sell {
+            &mut self.asks
+        } else {
+            &mut self.bids
         };
 
-        match order.order_side {
-            OrderSide::Buy => self.handle_buy_order(order),
-            OrderSide::Sell => self.handle_sell_order(order),
-        }
-    }
+        let mut found = false;
+        let mut insertion_idx = 0;
 
-    fn handle_buy_order(&mut self, mut order: Order) -> OrderResult {
-        let mut remaining = order.quantity;
-        let mut current_level = self.ask_min;
-        let order_id = order.order_id;
-        let price = order.price / self.tick_size;
+        for (idx, price_level_idx) in list.iter().enumerate().rev() {
+            let plevel = self.price_levels.get(*price_level_idx).unwrap();
+            if price.eq(&plevel.price) {
+                insertion_idx = idx;
+                found = true;
+                break;
+            }
 
-        while current_level.le(&price) {
-            let index = current_level.to_usize().unwrap();
-            let plevel = &mut self.price_levels[index];
-
-            for o in &mut plevel.orders {
-                if o.quantity == 0 {
-                    continue;
-                }
-
-                if remaining <= o.quantity {
-                    // ugly
-                    if remaining == o.quantity {
-                        plevel.depth -= 1;
+            match side {
+                OrderSide::Sell => {
+                    if price.lt(&plevel.price) {
+                        insertion_idx = idx + 1;
+                        break;
                     }
-                    plevel.quantity -= remaining;
-                    o.quantity -= remaining;
-                    return OrderResult::Filled;
                 }
-
-                plevel.quantity -= o.quantity;
-                plevel.depth -= 1;
-                remaining -= o.quantity;
-                o.quantity = 0;
-            }
-
-            current_level += self.tick_size;
-            self.ask_min += self.tick_size;
-        }
-
-        if price > self.bid_max {
-            self.bid_max = price;
-        }
-
-        order.quantity = remaining;
-
-        let index = price.to_usize().unwrap();
-        let plevel = &mut self.price_levels[index];
-        plevel.depth += 1;
-        plevel.quantity += order.quantity;
-        plevel.orders.push(order);
-
-        self.order_id_lookup
-            .insert(order_id, (price, plevel.orders.len() - 1));
-
-        OrderResult::PartialFill(order_id)
-    }
-
-    fn handle_sell_order(&mut self, mut order: Order) -> OrderResult {
-        let mut remaining = order.quantity;
-        let mut current_level = self.bid_max;
-        let order_id = order.order_id;
-        let price = order.price / self.tick_size;
-
-        while current_level.ge(&price) {
-            let index = current_level.to_usize().unwrap();
-            let plevel = &mut self.price_levels[index];
-
-            for o in &mut plevel.orders {
-                if o.quantity == 0 {
-                    continue;
-                }
-
-                if remaining <= o.quantity {
-                    if remaining == o.quantity {
-                        plevel.depth -= 1;
+                OrderSide::Buy => {
+                    if price.gt(&plevel.price) {
+                        insertion_idx = idx + 1;
+                        break;
                     }
-                    plevel.quantity -= remaining;
-                    o.quantity -= remaining;
-                    return OrderResult::Filled;
                 }
-
-                plevel.quantity -= o.quantity;
-                plevel.depth -= 1;
-                remaining -= o.quantity;
-                o.quantity = 0;
             }
-
-            current_level -= self.tick_size;
-            self.ask_min -= self.tick_size;
         }
 
-        if price < self.ask_min {
-            self.ask_min = price;
+        let entry = self.orders.vacant_entry();
+        let mut order = Order {
+            id,
+            price,
+            volume,
+            side,
+            price_level: 0,
+        };
+        self.order_map.reserve(id);
+        self.order_map.put(id, entry.key());
+
+        if found {
+            let plevel_idx = list[insertion_idx];
+            let plevel = self.price_levels.get_mut(plevel_idx).unwrap();
+            plevel.depth += 1;
+            plevel.volume += volume;
+            order.price_level = plevel_idx;
+        } else {
+            let new_plevel = PriceLevel {
+                price,
+                depth: 1,
+                volume,
+            };
+            let new_plevel_idx = self.price_levels.insert(new_plevel);
+
+            order.price_level = new_plevel_idx;
+            list.insert(insertion_idx, new_plevel_idx);
         }
 
-        order.quantity = remaining;
-
-        let index = price.to_usize().unwrap();
-        let plevel = &mut self.price_levels[index];
-        plevel.depth += 1;
-        plevel.quantity += order.quantity;
-        plevel.orders.push(order);
-
-        self.order_id_lookup
-            .insert(order_id, (price, plevel.orders.len() - 1));
-
-        OrderResult::PartialFill(order_id)
+        entry.insert(order);
     }
 
-    pub fn cancel_order(&mut self, order_id: u64) {
-        match self.order_id_lookup.get(&order_id) {
-            None => (),
-            Some((price, pos)) => {
-                let index = price.to_usize().unwrap();
-                let p = &mut self.price_levels[index];
-                let order = &mut p.orders[*pos];
+    pub fn execute_order(&mut self, order_id: u64, volume: u64) {
+        let order_slab_idx = self.order_map.get(order_id).unwrap();
+        let order = self.orders.get_mut(*order_slab_idx).unwrap();
+        order.volume -= volume;
 
-                p.quantity -= order.quantity;
-                p.depth -= 1;
+        let plevel = self.price_levels.get_mut(order.price_level).unwrap();
+        plevel.volume -= volume;
 
-                order.quantity = 0;
-
-                self.order_id_lookup.remove(&order_id);
-            }
+        if order.volume == 0 {
+            // Now dead order, remove
+            plevel.depth -= 1;
         }
+
+        if plevel.volume == 0 {
+            // Now dead level, remove
+        }
+    }
+
+    pub fn cancel_order(&mut self, order_id: u64, volume: u64) {
+        // Get price level for order
+        // Have to lookup because it doesn't have original price obv
+        // Order -> PriceLevel
+        // Deduct the volume from the PriceLevel
+        let order_slab_idx = self.order_map.get(order_id).unwrap();
+        let order = self.orders.get_mut(*order_slab_idx).unwrap();
+        order.volume -= volume;
+
+        let plevel = self.price_levels.get_mut(order.price_level).unwrap();
+        plevel.volume -= volume;
+
+        if order.volume == 0 {
+            // Now dead order, remove
+            plevel.depth -= 1;
+        }
+
+        if plevel.volume == 0 {
+            // Now dead level, remove
+        }
+    }
+
+    pub fn delete_order(&mut self, order_id: u64) {
+        // Get price level for order
+        // Have to lookup because it doesn't have original price obv
+        // Order -> PriceLevel
+        // Deduct the order's volume from PriceLevel
+        // Need to store Order Volume
+        let order_slab_idx = self.order_map.get(order_id).unwrap();
+        let order = self.orders.get_mut(*order_slab_idx).unwrap();
+
+        let plevel = self.price_levels.get_mut(order.price_level).unwrap();
+        plevel.volume -= order.volume;
+        plevel.depth -= 1;
+
+        // Order now dead, remove it
+
+        if plevel.volume == 0 {
+            // Now dead level, remove
+        }
+    }
+
+    pub fn replace_order(
+        &mut self,
+        old_order_id: u64,
+        new_order_id: u64,
+        price: Decimal,
+        volume: u64,
+    ) {
+        let order_slab_idx = self.order_map.get(old_order_id).unwrap();
+        let order = self.orders.get(*order_slab_idx).unwrap();
+        let side = order.side.clone();
+
+        self.delete_order(old_order_id);
+        self.add_order(new_order_id, price, volume, side);
     }
 }
