@@ -167,6 +167,7 @@ impl OrderBook {
         }
 
         //if plevel.volume == 0 {
+        // need to also remove from bid or ask list with a scan
         //    self.price_levels.remove(plevel_slab_idx);
         //}
     }
@@ -187,6 +188,7 @@ impl OrderBook {
         }
 
         //if plevel.volume == 0 {
+        // need to also remove from bid or ask list with a scan
         //    self.price_levels.remove(plevel_slab_idx);
         //}
     }
@@ -203,6 +205,7 @@ impl OrderBook {
         self.orders.remove(*order_slab_idx);
 
         //if plevel.volume == 0 {
+        // need to also remove from bid or ask list with a scan
         //    self.price_levels.remove(plevel_slab_idx);
         //}
     }

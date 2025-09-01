@@ -1,6 +1,6 @@
 # orderbook-rust
 
-An OrderBook for Nasdaq Itch. This is for an infinite L2 book. If we only cared about say 100 price levels, swap the Vecs for fixed arrays.
+An OrderBook for Nasdaq Itch. This is for an infinite L2 book. If we only cared about some number of price levels, swap the Vecs for fixed arrays. If price levels are fixed, consider using price as an index into the array for free sorting.
 
 ## Bench
 
