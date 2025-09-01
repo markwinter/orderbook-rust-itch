@@ -6,10 +6,10 @@ use slab::Slab;
 
 #[derive(Debug)]
 pub struct Order {
-    pub price: u32,
     pub id: u64,
     pub volume: u64,
     price_level: usize, // The price_level (Slab index) this order is stored at
+    pub price: u32,
     pub side: OrderSide,
 }
 
@@ -46,8 +46,8 @@ impl OrderBook {
             bids: Vec::with_capacity(1000),
             asks: Vec::with_capacity(1000),
             price_levels: Slab::with_capacity(2000),
-            orders: Slab::with_capacity(50_000_000),
-            order_map: OrderMap::new(50_000_000),
+            orders: Slab::with_capacity(150_000_000),
+            order_map: OrderMap::new(150_000_000),
         }
     }
 

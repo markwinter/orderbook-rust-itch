@@ -6,11 +6,9 @@ pub struct OrderMap {
 
 impl OrderMap {
     pub fn new(size: usize) -> Self {
-        let mut o = OrderMap {
-            orders: Vec::with_capacity(size),
-        };
-        o.reserve(size as u64);
-        o
+        OrderMap {
+            orders: vec![0; size],
+        }
     }
 
     pub fn reserve(&mut self, id: u64) {
