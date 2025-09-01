@@ -6,7 +6,7 @@ use slab::Slab;
 
 #[derive(Debug)]
 pub struct Order {
-    pub price: Decimal,
+    pub price: u32,
     pub id: u64,
     pub volume: u64,
     price_level: usize, // The price_level (Slab index) this order is stored at
@@ -21,7 +21,7 @@ pub enum OrderSide {
 
 #[derive(Debug)]
 struct PriceLevel {
-    price: Decimal,
+    price: u32,
     depth: usize,
     volume: u64,
 }
@@ -30,9 +30,9 @@ struct PriceLevel {
 pub struct OrderBook {
     // Smallest -> Largest
     // Tuple of price and pricelevel slab index
-    bids: Vec<(Decimal, usize)>,
+    bids: Vec<(u32, usize)>,
     // Largest -> Smallest
-    asks: Vec<(Decimal, usize)>,
+    asks: Vec<(u32, usize)>,
 
     price_levels: Slab<PriceLevel>,
     orders: Slab<Order>,
@@ -63,13 +63,13 @@ impl OrderBook {
     pub fn best_bid(&self) -> Option<Decimal> {
         let highest_bid_idx = self.bids.last()?;
         let highest_bid = self.price_levels.get(highest_bid_idx.1)?;
-        Some(highest_bid.price)
+        Some(Decimal::from(highest_bid.price) / Decimal::from(10_000))
     }
 
     pub fn best_ask(&self) -> Option<Decimal> {
         let lowest_ask_idx = self.asks.last()?;
         let lowest_ask = self.price_levels.get(lowest_ask_idx.1)?;
-        Some(lowest_ask.price)
+        Some(Decimal::from(lowest_ask.price) / Decimal::from(10_000))
     }
 
     pub fn spread(&self) -> Option<Decimal> {
@@ -79,13 +79,16 @@ impl OrderBook {
         let lowest_ask = self.price_levels.get(lowest_ask_idx.1)?;
         let highest_bid = self.price_levels.get(highest_bid_idx.1)?;
 
-        lowest_ask.price.checked_sub(highest_bid.price)
+        Some(
+            (Decimal::from(lowest_ask.price) - Decimal::from(highest_bid.price))
+                / Decimal::from(10_000),
+        )
     }
 
     // volume and depth for a plevel
     // volume and depth between plevels
 
-    pub fn add_order(&mut self, id: u64, price: Decimal, volume: u64, side: OrderSide) {
+    pub fn add_order(&mut self, id: u64, price: u32, volume: u64, side: OrderSide) {
         let list = if side == OrderSide::Sell {
             &mut self.asks
         } else {
@@ -204,13 +207,7 @@ impl OrderBook {
         //}
     }
 
-    pub fn replace_order(
-        &mut self,
-        old_order_id: u64,
-        new_order_id: u64,
-        price: Decimal,
-        volume: u64,
-    ) {
+    pub fn replace_order(&mut self, old_order_id: u64, new_order_id: u64, price: u32, volume: u64) {
         let order_slab_idx = self.order_map.get(old_order_id).unwrap();
         let order = self.orders.get(*order_slab_idx).unwrap();
         let side = order.side.clone();

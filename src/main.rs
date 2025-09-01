@@ -69,7 +69,7 @@ fn main() {
 
                 book.add_order(
                     order.reference,
-                    order.price.into(),
+                    order.price.raw(),
                     order.shares as u64,
                     side,
                 );
@@ -153,7 +153,7 @@ fn main() {
                 book.replace_order(
                     order.old_reference,
                     order.new_reference,
-                    order.price.into(),
+                    order.price.raw(),
                     order.shares as u64,
                 );
             }
