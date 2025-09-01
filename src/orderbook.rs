@@ -46,7 +46,7 @@ impl OrderBook {
         OrderBook {
             bids: Vec::with_capacity(100),
             asks: Vec::with_capacity(100),
-            price_levels: Slab::with_capacity(100),
+            price_levels: Slab::with_capacity(200),
             orders: Slab::with_capacity(50_000_000),
             order_map: OrderMap::new(50_000_000),
         }
