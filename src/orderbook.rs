@@ -6,13 +6,11 @@ use slab::Slab;
 
 #[derive(Debug)]
 pub struct Order {
-    pub id: u64,
-    pub side: OrderSide,
     pub price: Decimal,
+    pub id: u64,
     pub volume: u64,
-
-    // The price_level (Slab index) this order is stored at
-    price_level: usize,
+    price_level: usize, // The price_level (Slab index) this order is stored at
+    pub side: OrderSide,
 }
 
 #[derive(Debug, PartialEq, Clone)]

@@ -5,9 +5,10 @@ An OrderBook for Nasdaq Itch. This is for an infinite L2 book. If we only cared 
 ## Bench
 
 ```
-add_order               time:   [166.99 ns 167.49 ns 167.93 ns]
-Found 2 outliers among 100 measurements (2.00%)
-  2 (2.00%) high mild
+add_order               time:   [159.26 ns 159.60 ns 159.91 ns]
+Found 3 outliers among 100 measurements (3.00%)
+  2 (2.00%) low mild
+  1 (1.00%) high severe
 ```
 
 ## Credit
