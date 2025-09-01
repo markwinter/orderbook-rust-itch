@@ -37,8 +37,6 @@ pub fn bench_add_order(c: &mut Criterion) {
             BatchSize::SmallInput,
         )
     });
-
-    dbg!(ob.meta());
 }
 
 criterion_group!(benches, bench_add_order);

@@ -31,9 +31,10 @@ struct PriceLevel {
 #[derive(Debug, Default)]
 pub struct OrderBook {
     // Smallest -> Largest
-    bids: Vec<usize>,
+    // Tuple of price and pricelevel slab index
+    bids: Vec<(Decimal, usize)>,
     // Largest -> Smallest
-    asks: Vec<usize>,
+    asks: Vec<(Decimal, usize)>,
 
     price_levels: Slab<PriceLevel>,
     orders: Slab<Order>,
@@ -44,9 +45,9 @@ pub struct OrderBook {
 impl OrderBook {
     pub fn new() -> Self {
         OrderBook {
-            bids: Vec::with_capacity(100),
-            asks: Vec::with_capacity(100),
-            price_levels: Slab::with_capacity(200),
+            bids: Vec::with_capacity(1000),
+            asks: Vec::with_capacity(1000),
+            price_levels: Slab::with_capacity(2000),
             orders: Slab::with_capacity(50_000_000),
             order_map: OrderMap::new(50_000_000),
         }
@@ -63,13 +64,13 @@ impl OrderBook {
 
     pub fn best_bid(&self) -> Option<Decimal> {
         let highest_bid_idx = self.bids.last()?;
-        let highest_bid = self.price_levels.get(*highest_bid_idx)?;
+        let highest_bid = self.price_levels.get(highest_bid_idx.1)?;
         Some(highest_bid.price)
     }
 
     pub fn best_ask(&self) -> Option<Decimal> {
         let lowest_ask_idx = self.asks.last()?;
-        let lowest_ask = self.price_levels.get(*lowest_ask_idx)?;
+        let lowest_ask = self.price_levels.get(lowest_ask_idx.1)?;
         Some(lowest_ask.price)
     }
 
@@ -77,8 +78,8 @@ impl OrderBook {
         let lowest_ask_idx = self.asks.last()?;
         let highest_bid_idx = self.bids.last()?;
 
-        let lowest_ask = self.price_levels.get(*lowest_ask_idx)?;
-        let highest_bid = self.price_levels.get(*highest_bid_idx)?;
+        let lowest_ask = self.price_levels.get(lowest_ask_idx.1)?;
+        let highest_bid = self.price_levels.get(highest_bid_idx.1)?;
 
         lowest_ask.price.checked_sub(highest_bid.price)
     }
@@ -96,9 +97,8 @@ impl OrderBook {
         let mut found = false;
         let mut insertion_idx = 0;
 
-        for (idx, price_level_idx) in list.iter().enumerate().rev() {
-            let plevel = self.price_levels.get(*price_level_idx).unwrap();
-            if price.eq(&plevel.price) {
+        for (idx, (plevel_price, _)) in list.iter().enumerate().rev() {
+            if price.eq(plevel_price) {
                 insertion_idx = idx;
                 found = true;
                 break;
@@ -106,13 +106,13 @@ impl OrderBook {
 
             match side {
                 OrderSide::Sell => {
-                    if price.lt(&plevel.price) {
+                    if price.lt(plevel_price) {
                         insertion_idx = idx + 1;
                         break;
                     }
                 }
                 OrderSide::Buy => {
-                    if price.gt(&plevel.price) {
+                    if price.gt(plevel_price) {
                         insertion_idx = idx + 1;
                         break;
                     }
@@ -133,10 +133,10 @@ impl OrderBook {
 
         if found {
             let plevel_idx = list[insertion_idx];
-            let plevel = self.price_levels.get_mut(plevel_idx).unwrap();
+            let plevel = self.price_levels.get_mut(plevel_idx.1).unwrap();
             plevel.depth += 1;
             plevel.volume += volume;
-            order.price_level = plevel_idx;
+            order.price_level = plevel_idx.1;
         } else {
             let new_plevel_idx = self.price_levels.insert(PriceLevel {
                 price,
@@ -145,7 +145,7 @@ impl OrderBook {
             });
 
             order.price_level = new_plevel_idx;
-            list.insert(insertion_idx, new_plevel_idx);
+            list.insert(insertion_idx, (price, new_plevel_idx));
         }
 
         entry.insert(order);

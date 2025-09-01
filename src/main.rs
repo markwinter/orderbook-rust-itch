@@ -34,6 +34,7 @@ fn main() {
             dbg!(&book.spread());
             dbg!(&book.best_bid());
             dbg!(&book.best_ask());
+            dbg!(&book.meta());
             return;
         }
         let m = msg.unwrap();
