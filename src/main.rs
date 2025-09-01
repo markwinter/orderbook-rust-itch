@@ -30,7 +30,7 @@ fn main() {
     let mut processed = 0;
 
     for msg in stream {
-        if processed > 10000 {
+        if processed > 100_000 {
             dbg!(&book.spread());
             dbg!(&book.best_bid());
             dbg!(&book.best_ask());
