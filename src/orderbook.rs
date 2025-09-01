@@ -5,12 +5,10 @@ use rust_decimal::Decimal;
 use slab::Slab;
 
 #[derive(Debug)]
-pub struct Order {
-    pub id: u64,
-    pub volume: u64,
+struct Order {
     price_level: usize, // The price_level (Slab index) this order is stored at
-    pub price: u32,
-    pub side: OrderSide,
+    volume: u32,
+    side: OrderSide,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -21,9 +19,9 @@ pub enum OrderSide {
 
 #[derive(Debug)]
 struct PriceLevel {
-    price: u32,
     depth: usize,
-    volume: u64,
+    price: u32,
+    volume: u32,
 }
 
 #[derive(Debug, Default)]
@@ -88,7 +86,7 @@ impl OrderBook {
     // volume and depth for a plevel
     // volume and depth between plevels
 
-    pub fn add_order(&mut self, id: u64, price: u32, volume: u64, side: OrderSide) {
+    pub fn add_order(&mut self, id: u64, price: u32, volume: u32, side: OrderSide) {
         let list = if side == OrderSide::Sell {
             &mut self.asks
         } else {
@@ -123,8 +121,6 @@ impl OrderBook {
 
         let entry = self.orders.vacant_entry();
         let mut order = Order {
-            id,
-            price,
             volume,
             side,
             price_level: 0,
@@ -152,7 +148,7 @@ impl OrderBook {
         entry.insert(order);
     }
 
-    pub fn execute_order(&mut self, order_id: u64, volume: u64) {
+    pub fn execute_order(&mut self, order_id: u64, volume: u32) {
         let order_slab_idx = self.order_map.get(order_id).unwrap();
         let order = self.orders.get_mut(*order_slab_idx).unwrap();
         order.volume -= volume;
@@ -172,7 +168,7 @@ impl OrderBook {
         //}
     }
 
-    pub fn cancel_order(&mut self, order_id: u64, volume: u64) {
+    pub fn cancel_order(&mut self, order_id: u64, volume: u32) {
         let order_slab_idx = self.order_map.get(order_id).unwrap();
         let order = self.orders.get_mut(*order_slab_idx).unwrap();
         order.volume -= volume;
@@ -210,7 +206,7 @@ impl OrderBook {
         //}
     }
 
-    pub fn replace_order(&mut self, old_order_id: u64, new_order_id: u64, price: u32, volume: u64) {
+    pub fn replace_order(&mut self, old_order_id: u64, new_order_id: u64, price: u32, volume: u32) {
         let order_slab_idx = self.order_map.get(old_order_id).unwrap();
         let order = self.orders.get(*order_slab_idx).unwrap();
         let side = order.side.clone();

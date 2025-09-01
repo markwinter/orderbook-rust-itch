@@ -67,12 +67,7 @@ fn main() {
                     OrderSide::Sell
                 };
 
-                book.add_order(
-                    order.reference,
-                    order.price.raw(),
-                    order.shares as u64,
-                    side,
-                );
+                book.add_order(order.reference, order.price.raw(), order.shares, side);
             }
             ORDER_EXECUTED => {
                 let aapl = stock_directory[&args.symbol];
@@ -89,7 +84,7 @@ fn main() {
                     continue;
                 };
 
-                book.execute_order(reference, executed as u64);
+                book.execute_order(reference, executed);
             }
             ORDER_EXECUTED_PRICE => {
                 let aapl = stock_directory[&args.symbol];
@@ -111,7 +106,7 @@ fn main() {
                     continue;
                 }
 
-                book.execute_order(reference, executed as u64);
+                book.execute_order(reference, executed);
             }
             ORDER_CANCEL => {
                 let aapl = stock_directory[&args.symbol];
@@ -126,7 +121,7 @@ fn main() {
                 else {
                     continue;
                 };
-                book.cancel_order(reference, cancelled as u64);
+                book.cancel_order(reference, cancelled);
             }
             ORDER_DELETE => {
                 let aapl = stock_directory[&args.symbol];
@@ -154,7 +149,7 @@ fn main() {
                     order.old_reference,
                     order.new_reference,
                     order.price.raw(),
-                    order.shares as u64,
+                    order.shares,
                 );
             }
             _ => continue,
