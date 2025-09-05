@@ -59,28 +59,20 @@ impl OrderBook {
     }
 
     pub fn best_bid(&self) -> Option<Decimal> {
-        let highest_bid_idx = self.bids.last()?;
-        let highest_bid = self.price_levels.get(highest_bid_idx.1)?;
-        Some(Decimal::from(highest_bid.price) / Decimal::from(10_000))
+        let highest_bid = self.bids.last()?.0;
+        Some(Decimal::from(highest_bid) / Decimal::from(10_000))
     }
 
     pub fn best_ask(&self) -> Option<Decimal> {
-        let lowest_ask_idx = self.asks.last()?;
-        let lowest_ask = self.price_levels.get(lowest_ask_idx.1)?;
-        Some(Decimal::from(lowest_ask.price) / Decimal::from(10_000))
+        let lowest_ask = self.asks.last()?.0;
+        Some(Decimal::from(lowest_ask) / Decimal::from(10_000))
     }
 
     pub fn spread(&self) -> Option<Decimal> {
-        let lowest_ask_idx = self.asks.last()?;
-        let highest_bid_idx = self.bids.last()?;
+        let lowest_ask = self.asks.last()?.0;
+        let highest_bid = self.bids.last()?.0;
 
-        let lowest_ask = self.price_levels.get(lowest_ask_idx.1)?;
-        let highest_bid = self.price_levels.get(highest_bid_idx.1)?;
-
-        Some(
-            (Decimal::from(lowest_ask.price) - Decimal::from(highest_bid.price))
-                / Decimal::from(10_000),
-        )
+        Some((Decimal::from(lowest_ask) - Decimal::from(highest_bid)) / Decimal::from(10_000))
     }
 
     // volume and depth for a plevel
