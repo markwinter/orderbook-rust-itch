@@ -2,3 +2,4 @@
 *.NASDAQ_ITCH50
 /target
 *.gz
+*.itch

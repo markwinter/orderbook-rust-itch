@@ -1,5 +1,4 @@
 use clap::Parser;
-use rustc_hash::FxHashMap;
 
 use orderbook_rust::orderbook::{OrderBook, OrderSide};
 
@@ -10,12 +9,13 @@ const ORDER_EXECUTED_PRICE: u8 = b'C';
 const ORDER_CANCEL: u8 = b'X';
 const ORDER_DELETE: u8 = b'D';
 const ORDER_REPLACE: u8 = b'U';
-const STOCK_DIRECTORY: u8 = b'R';
 
 #[derive(Parser)]
 struct Args {
     file: String,
-    symbol: String,
+
+    #[arg(long)]
+    max_messages: Option<usize>,
 }
 
 fn main() {
@@ -23,41 +23,22 @@ fn main() {
 
     let stream = itchy::MessageStream::from_file(args.file).unwrap();
 
-    let mut stock_directory: FxHashMap<String, u16> =
-        FxHashMap::with_capacity_and_hasher(5000, rustc_hash::FxBuildHasher);
-
     let mut book = OrderBook::new();
 
-    let mut processed = 0;
-
-    for msg in stream {
-        if processed > 10_000 {
-            dbg!(&book.spread());
-            dbg!(&book.best_bid());
-            dbg!(&book.best_ask());
-            dbg!(&book.meta());
-            return;
+    for (processed, msg) in stream.enumerate() {
+        if let Some(max) = args.max_messages {
+            if processed > max {
+                dbg!(&book.spread());
+                dbg!(&book.best_bid());
+                dbg!(&book.best_ask());
+                dbg!(&book.meta());
+                return;
+            }
         }
         let m = msg.unwrap();
 
         match m.tag {
-            STOCK_DIRECTORY => {
-                let itchy::Body::StockDirectory(dir) = &m.body else {
-                    continue;
-                };
-
-                let stock = dir.stock.trim_end().to_lowercase();
-
-                stock_directory.insert(stock, m.stock_locate);
-            }
             ORDER_ADD | ORDER_ADD_ATTRIBUTED => {
-                let aapl = stock_directory[&args.symbol];
-                if m.stock_locate != aapl {
-                    continue;
-                }
-
-                processed += 1;
-
                 let itchy::Body::AddOrder(order) = &m.body else {
                     continue;
                 };
@@ -71,12 +52,6 @@ fn main() {
                 book.add_order(order.reference, order.price.raw(), order.shares, side);
             }
             ORDER_EXECUTED => {
-                let aapl = stock_directory[&args.symbol];
-                if m.stock_locate != aapl {
-                    continue;
-                }
-                processed += 1;
-
                 let itchy::Body::OrderExecuted {
                     reference,
                     executed,
@@ -89,12 +64,6 @@ fn main() {
                 book.execute_order(reference, executed);
             }
             ORDER_EXECUTED_PRICE => {
-                let aapl = stock_directory[&args.symbol];
-                if m.stock_locate != aapl {
-                    continue;
-                }
-                processed += 1;
-
                 let itchy::Body::OrderExecutedWithPrice {
                     reference,
                     executed,
@@ -112,12 +81,6 @@ fn main() {
                 book.execute_order(reference, executed);
             }
             ORDER_CANCEL => {
-                let aapl = stock_directory[&args.symbol];
-                if m.stock_locate != aapl {
-                    continue;
-                }
-                processed += 1;
-
                 let itchy::Body::OrderCancelled {
                     reference,
                     cancelled,
@@ -128,12 +91,6 @@ fn main() {
                 book.cancel_order(reference, cancelled);
             }
             ORDER_DELETE => {
-                let aapl = stock_directory[&args.symbol];
-                if m.stock_locate != aapl {
-                    continue;
-                }
-                processed += 1;
-
                 let itchy::Body::DeleteOrder { reference } = m.body else {
                     continue;
                 };
@@ -141,12 +98,6 @@ fn main() {
                 book.delete_order(reference);
             }
             ORDER_REPLACE => {
-                let aapl = stock_directory[&args.symbol];
-                if m.stock_locate != aapl {
-                    continue;
-                }
-                processed += 1;
-
                 let itchy::Body::ReplaceOrder(order) = &m.body else {
                     continue;
                 };
