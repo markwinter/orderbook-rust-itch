@@ -2,11 +2,11 @@ mod ordermap;
 
 use ordermap::OrderMap;
 use rust_decimal::Decimal;
-use slab::Slab;
+use slotmap::{DefaultKey, SlotMap};
 
 #[derive(Debug)]
 struct Order {
-    price_level: usize, // The price_level (Slab index) this order is stored at
+    price_level: DefaultKey, // The price_level (Slab index) this order is stored at
     volume: u32,
     side: OrderSide,
 }
@@ -27,12 +27,12 @@ struct PriceLevel {
 pub struct OrderBook {
     // Smallest -> Largest
     // Tuple of price and pricelevel slab index
-    bids: Vec<(u32, usize)>,
+    bids: Vec<(u32, DefaultKey)>,
     // Largest -> Smallest
-    asks: Vec<(u32, usize)>,
+    asks: Vec<(u32, DefaultKey)>,
 
-    price_levels: Slab<PriceLevel>,
-    orders: Slab<Order>,
+    price_levels: SlotMap<DefaultKey, PriceLevel>,
+    orders: SlotMap<DefaultKey, Order>,
     order_map: OrderMap,
 }
 
@@ -41,8 +41,8 @@ impl OrderBook {
         OrderBook {
             bids: Vec::with_capacity(6000),
             asks: Vec::with_capacity(3000),
-            price_levels: Slab::with_capacity(8000),
-            orders: Slab::with_capacity(160_000_000),
+            price_levels: SlotMap::with_capacity(8000),
+            orders: SlotMap::with_capacity(160_000_000),
             order_map: OrderMap::new(160_000_000),
         }
     }
@@ -195,7 +195,7 @@ impl OrderBook {
         self.add_order(new_order_id, price, volume, side);
     }
 
-    fn remove_price_level(&mut self, plevel_slab_idx: usize, side: OrderSide) {
+    fn remove_price_level(&mut self, plevel_slab_idx: DefaultKey, side: OrderSide) {
         let list = if side == OrderSide::Sell {
             &mut self.asks
         } else {

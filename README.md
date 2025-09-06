@@ -20,17 +20,15 @@ EXECUTED_PRICE: 224
 CANCEL: 10,161
 
 ```
-process itch messages   time:   [188.95 ms 189.63 ms 190.75 ms]
-                        change: [+0.1637% +0.5428% +1.1330%] (p = 0.02 < 0.05)
-                        Change within noise threshold.
-Found 7 outliers among 100 measurements (7.00%)
-  2 (2.00%) high mild
-  5 (5.00%) high severe
+process itch messages   time:   [176.45 ms 176.96 ms 177.53 ms]
+                        change: [−0.3495% +0.0917% +0.4911%] (p = 0.68 > 0.05)
+                        No change in performance detected.
+Found 14 outliers among 100 measurements (14.00%)
+  5 (5.00%) high mild
+  9 (9.00%) high severe
 ```
 
-189 ms to process 1,993,352 messages gives an average of 95 ns/message
-
-If we processed only add orders, it worked out to about to 94 ns/message, so add orders definitely dominates the order book.
+176 ms to process 1,993,352 messages gives an average of 88 ns/message
 
 ### Random orders
 
