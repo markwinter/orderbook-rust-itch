@@ -1,8 +1,8 @@
-use clap::Parser;
-use std::time::Instant;
+use std::path::PathBuf;
 
-use itchy::Message;
-use orderbook_rust::orderbook::{OrderBook, OrderSide};
+use criterion::{criterion_group, criterion_main, Criterion};
+use itchy::MessageStream;
+use orderbook_rust::orderbook::*;
 
 const ORDER_ADD: u8 = b'A';
 const ORDER_ADD_ATTRIBUTED: u8 = b'F';
@@ -12,43 +12,17 @@ const ORDER_CANCEL: u8 = b'X';
 const ORDER_DELETE: u8 = b'D';
 const ORDER_REPLACE: u8 = b'U';
 
-#[derive(Parser)]
-struct Args {
-    file: String,
-
-    #[arg(long)]
-    max_messages: Option<usize>,
+fn load_messages(path: &PathBuf) -> Vec<itchy::Message> {
+    let stream = MessageStream::from_file(path).expect("failed to open ITCH file");
+    let mut messages = Vec::with_capacity(2_000_000);
+    for msg in stream.into_iter().flatten() {
+        messages.push(msg);
+    }
+    messages
 }
 
-fn main() {
-    let args = Args::parse();
-
-    let stream = itchy::MessageStream::from_file(args.file).unwrap();
-    let mut messages: Vec<Message> = Vec::with_capacity(2_000_000);
-
-    for msg in stream {
-        let m = msg.unwrap();
-        messages.push(m);
-    }
-
-    let mut book = OrderBook::new();
-
-    let mut count_add = 0;
-    let mut count_executed = 0;
-    let mut count_executed_price = 0;
-    let mut count_cancel = 0;
-    let mut count_delete = 0;
-    let mut count_replace = 0;
-
-    let start = Instant::now();
-
-    for (processed, m) in messages.iter().enumerate() {
-        if let Some(max) = args.max_messages {
-            if processed > max {
-                break;
-            }
-        }
-
+fn process_messages(book: &mut OrderBook, messages: &[itchy::Message]) {
+    for m in messages {
         match m.tag {
             ORDER_ADD | ORDER_ADD_ATTRIBUTED => {
                 let itchy::Body::AddOrder(order) = &m.body else {
@@ -60,7 +34,6 @@ fn main() {
                     OrderSide::Sell
                 };
                 book.add_order(order.reference, order.price.raw(), order.shares, side);
-                count_add += 1;
             }
             ORDER_EXECUTED => {
                 let itchy::Body::OrderExecuted {
@@ -72,7 +45,6 @@ fn main() {
                     continue;
                 };
                 book.execute_order(reference, executed);
-                count_executed += 1;
             }
             ORDER_EXECUTED_PRICE => {
                 let itchy::Body::OrderExecutedWithPrice {
@@ -84,10 +56,10 @@ fn main() {
                 else {
                     continue;
                 };
-                if printable {
-                    book.execute_order(reference, executed);
-                    count_executed_price += 1;
+                if !printable {
+                    continue;
                 }
+                book.execute_order(reference, executed);
             }
             ORDER_CANCEL => {
                 let itchy::Body::OrderCancelled {
@@ -98,14 +70,12 @@ fn main() {
                     continue;
                 };
                 book.cancel_order(reference, cancelled);
-                count_cancel += 1;
             }
             ORDER_DELETE => {
                 let itchy::Body::DeleteOrder { reference } = m.body else {
                     continue;
                 };
                 book.delete_order(reference);
-                count_delete += 1;
             }
             ORDER_REPLACE => {
                 let itchy::Body::ReplaceOrder(order) = &m.body else {
@@ -117,25 +87,25 @@ fn main() {
                     order.price.raw(),
                     order.shares,
                 );
-                count_replace += 1;
             }
-            _ => continue,
+            _ => {}
         }
     }
-
-    let duration = start.elapsed();
-    let total_messages = messages
-        .len()
-        .min(args.max_messages.unwrap_or(messages.len()));
-    let ns_per_message = (duration.as_nanos() as f64) / (total_messages as f64);
-
-    println!("Processed {total_messages} messages in {duration:?}");
-    println!("~{ns_per_message:.2} ns/message");
-    println!("Order counts:");
-    println!("  ADD: {count_add}");
-    println!("  EXECUTED: {count_executed}");
-    println!("  EXECUTED_PRICE: {count_executed_price}");
-    println!("  CANCEL: {count_cancel}");
-    println!("  DELETE: {count_delete}");
-    println!("  REPLACE: {count_replace}");
 }
+
+fn bench_orderbook(c: &mut Criterion) {
+    let path = PathBuf::from("aapl_orders.itch"); // adjust path
+    let messages = load_messages(&path);
+    let mut book = OrderBook::new();
+
+    println!("Loaded {} messages", messages.len());
+
+    c.bench_function("process itch messages", |b| {
+        b.iter(|| {
+            process_messages(&mut book, &messages);
+        });
+    });
+}
+
+criterion_group!(benches, bench_orderbook);
+criterion_main!(benches);

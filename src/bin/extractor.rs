@@ -7,21 +7,14 @@ use itchy::MessageStream;
 
 const STOCK_DIRECTORY: u8 = b'R';
 
-/// Copy only the order-related ITCH messages for a given symbol into a new file.
-/// First pass: find stock_locate for symbol via StockDirectory messages.
-/// Second pass: copy raw frames verbatim if they match that stock_locate.
 #[derive(Parser, Debug)]
 struct Args {
-    /// Input ITCH file (uncompressed)
     #[arg(short, long)]
     input: PathBuf,
-    /// Output ITCH file (will be created/overwritten)
     #[arg(short, long)]
     output: PathBuf,
-    /// Symbol to filter (case-insensitive)
     #[arg(short, long)]
     symbol: String,
-
     #[arg(long)]
     max_messages: Option<usize>,
 }
@@ -60,7 +53,6 @@ fn main() -> io::Result<()> {
     let args = Args::parse();
     let symbol = args.symbol.to_lowercase();
 
-    // --- Pass 1: discover stock_locate for symbol ---
     let mut locate: Option<u16> = None;
     let stream = MessageStream::from_file(&args.input).map_err(std::io::Error::other)?;
 
@@ -75,7 +67,7 @@ fn main() -> io::Result<()> {
             }
         };
         if msg.tag != STOCK_DIRECTORY && directory_started {
-            break; // directory section is finished
+            break;
         }
         let itchy::Body::StockDirectory(dir) = &msg.body else {
             continue;
@@ -95,7 +87,6 @@ fn main() -> io::Result<()> {
     };
     eprintln!("found symbol {symbol} with stock_locate={locate}");
 
-    // --- Pass 2: filter raw frames ---
     let infile = File::open(&args.input)?;
     let mut r = BufReader::with_capacity(1 << 20, infile);
 
@@ -112,10 +103,9 @@ fn main() -> io::Result<()> {
             }
         }
 
-        // Frame: u16 length + payload
         let mut len_buf = [0u8; 2];
         if !read_exact_or_eof(&mut r, &mut len_buf)? {
-            break; // EOF
+            break;
         }
         let msg_len = u16::from_be_bytes(len_buf) as usize;
         let mut payload = vec![0u8; msg_len];
@@ -124,7 +114,7 @@ fn main() -> io::Result<()> {
         total += 1;
 
         if msg_len < 3 {
-            continue; // malformed
+            continue;
         }
 
         let tag = payload[0];

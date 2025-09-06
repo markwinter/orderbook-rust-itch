@@ -4,7 +4,37 @@ An OrderBook for Nasdaq Itch. This is for an infinite L2 book. If we only cared 
 
 ## Bench
 
-Benched adding Buy and Sell orders across 100 price levels. Performance decreases with the number of price levels for bids or asks separately as more vector linear scanning is required. The prices are random so don't really reflect reality which is more activity at the insides. Could probably setup a better approximate distribution if I cared, or use real order data for test data similar to the main binary in this repo.
+### Itch AAPL orders
+
+I extracted all AAPL orders (see `src/bin/extractor.rs`) from a full day of Itch data.
+
+There were 1,993,352 order messages which were then processed as a benchmark, re-using the same order book.
+
+The order messages were as follows:
+
+ADD: 907,157
+DELETE: 869,314
+REPLACE: 151,325
+EXECUTED: 55,168
+EXECUTED_PRICE: 224
+CANCEL: 10,161
+
+```
+process itch messages   time:   [188.95 ms 189.63 ms 190.75 ms]
+                        change: [+0.1637% +0.5428% +1.1330%] (p = 0.02 < 0.05)
+                        Change within noise threshold.
+Found 7 outliers among 100 measurements (7.00%)
+  2 (2.00%) high mild
+  5 (5.00%) high severe
+```
+
+189 ms to process 1,993,352 messages gives an average of 95 ns/message
+
+If we processed only add orders, it worked out to about to 94 ns/message, so add orders definitely dominates the order book.
+
+### Random orders
+
+Benched adding Buy and Sell orders across 100 price levels. Performance decreases with the number of price levels for bids or asks separately as more vector linear scanning is required.
 
 ```
 add_order               time:   [30.861 ns 30.981 ns 31.098 ns]

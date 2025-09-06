@@ -11,7 +11,7 @@ struct Order {
     side: OrderSide,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum OrderSide {
     Buy,
     Sell,
@@ -41,11 +41,11 @@ pub struct OrderBook {
 impl OrderBook {
     pub fn new() -> Self {
         OrderBook {
-            bids: Vec::with_capacity(1000),
-            asks: Vec::with_capacity(1000),
-            price_levels: Slab::with_capacity(2000),
-            orders: Slab::with_capacity(150_000_000),
-            order_map: OrderMap::new(150_000_000),
+            bids: Vec::with_capacity(6000),
+            asks: Vec::with_capacity(3000),
+            price_levels: Slab::with_capacity(8000),
+            orders: Slab::with_capacity(160_000_000),
+            order_map: OrderMap::new(160_000_000),
         }
     }
 
@@ -74,9 +74,6 @@ impl OrderBook {
 
         Some((Decimal::from(lowest_ask) - Decimal::from(highest_bid)) / Decimal::from(10_000))
     }
-
-    // volume and depth for a plevel
-    // volume and depth between plevels
 
     pub fn add_order(&mut self, id: u64, price: u32, volume: u32, side: OrderSide) {
         let list = if side == OrderSide::Sell {
@@ -143,6 +140,7 @@ impl OrderBook {
     pub fn execute_order(&mut self, order_id: u64, volume: u32) {
         let order_slab_idx = self.order_map.get(order_id).unwrap();
         let order = self.orders.get_mut(*order_slab_idx).unwrap();
+        let side = order.side;
         order.volume -= volume;
 
         let plevel_slab_idx = order.price_level;
@@ -154,15 +152,29 @@ impl OrderBook {
             self.orders.remove(*order_slab_idx);
         }
 
-        //if plevel.volume == 0 {
-        // need to also remove from bid or ask list with a scan
-        //    self.price_levels.remove(plevel_slab_idx);
-        //}
+        if plevel.volume == 0 {
+            let list = if side == OrderSide::Sell {
+                &mut self.asks
+            } else {
+                &mut self.bids
+            };
+
+            for (idx, (_, slab_idx)) in list.iter_mut().enumerate().rev() {
+                if *slab_idx != plevel_slab_idx {
+                    continue;
+                }
+
+                list.remove(idx);
+                break;
+            }
+            self.price_levels.remove(plevel_slab_idx);
+        }
     }
 
     pub fn cancel_order(&mut self, order_id: u64, volume: u32) {
         let order_slab_idx = self.order_map.get(order_id).unwrap();
         let order = self.orders.get_mut(*order_slab_idx).unwrap();
+        let side = order.side;
         order.volume -= volume;
 
         let plevel_slab_idx = order.price_level;
@@ -175,15 +187,29 @@ impl OrderBook {
             self.orders.remove(*order_slab_idx);
         }
 
-        //if plevel.volume == 0 {
-        // need to also remove from bid or ask list with a scan
-        //    self.price_levels.remove(plevel_slab_idx);
-        //}
+        if plevel.volume == 0 {
+            let list = if side == OrderSide::Sell {
+                &mut self.asks
+            } else {
+                &mut self.bids
+            };
+
+            for (idx, (_, slab_idx)) in list.iter_mut().enumerate().rev() {
+                if *slab_idx != plevel_slab_idx {
+                    continue;
+                }
+
+                list.remove(idx);
+                break;
+            }
+            self.price_levels.remove(plevel_slab_idx);
+        }
     }
 
     pub fn delete_order(&mut self, order_id: u64) {
         let order_slab_idx = self.order_map.get(order_id).unwrap();
         let order = self.orders.get_mut(*order_slab_idx).unwrap();
+        let side = order.side;
 
         let plevel_slab_idx = order.price_level;
         let plevel = self.price_levels.get_mut(plevel_slab_idx).unwrap();
@@ -192,16 +218,29 @@ impl OrderBook {
 
         self.orders.remove(*order_slab_idx);
 
-        //if plevel.volume == 0 {
-        // need to also remove from bid or ask list with a scan
-        //    self.price_levels.remove(plevel_slab_idx);
-        //}
+        if plevel.volume == 0 {
+            let list = if side == OrderSide::Sell {
+                &mut self.asks
+            } else {
+                &mut self.bids
+            };
+
+            for (idx, (_, slab_idx)) in list.iter_mut().enumerate().rev() {
+                if *slab_idx != plevel_slab_idx {
+                    continue;
+                }
+
+                list.remove(idx);
+                break;
+            }
+            self.price_levels.remove(plevel_slab_idx);
+        }
     }
 
     pub fn replace_order(&mut self, old_order_id: u64, new_order_id: u64, price: u32, volume: u32) {
         let order_slab_idx = self.order_map.get(old_order_id).unwrap();
         let order = self.orders.get(*order_slab_idx).unwrap();
-        let side = order.side.clone();
+        let side = order.side;
 
         self.delete_order(old_order_id);
         self.add_order(new_order_id, price, volume, side);
