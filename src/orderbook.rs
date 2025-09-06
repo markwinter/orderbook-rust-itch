@@ -2,11 +2,11 @@ mod ordermap;
 
 use ordermap::OrderMap;
 use rust_decimal::Decimal;
-use stable_vec::ExternStableVec;
+use slab::Slab;
 
 #[derive(Debug)]
 struct Order {
-    price_level: usize, // The price_level (ExternStableVec index) this order is stored at
+    price_level: usize, // The price_level (Slab index) this order is stored at
     volume: u32,
     side: OrderSide,
 }
@@ -31,8 +31,8 @@ pub struct OrderBook {
     // Largest -> Smallest
     asks: Vec<(u32, usize)>,
 
-    price_levels: ExternStableVec<PriceLevel>,
-    orders: ExternStableVec<Order>,
+    price_levels: Slab<PriceLevel>,
+    orders: Slab<Order>,
     order_map: OrderMap,
 }
 
@@ -41,8 +41,8 @@ impl OrderBook {
         OrderBook {
             bids: Vec::with_capacity(6000),
             asks: Vec::with_capacity(3000),
-            price_levels: ExternStableVec::with_capacity(8000),
-            orders: ExternStableVec::with_capacity(160_000_000),
+            price_levels: Slab::with_capacity(8000),
+            orders: Slab::with_capacity(160_000_000),
             order_map: OrderMap::new(160_000_000),
         }
     }
@@ -51,8 +51,8 @@ impl OrderBook {
         (
             self.bids.len(),
             self.asks.len(),
-            self.price_levels.num_elements(),
-            self.orders.num_elements(),
+            self.price_levels.len(),
+            self.orders.len(),
         )
     }
 
@@ -113,12 +113,12 @@ impl OrderBook {
             plevel.depth += 1;
             plevel.volume += volume;
         } else {
-            plevel_idx = self.price_levels.push(PriceLevel { depth: 1, volume });
+            plevel_idx = self.price_levels.insert(PriceLevel { depth: 1, volume });
 
             list.insert(insertion_idx, (price, plevel_idx));
         }
 
-        let order_idx = self.orders.push(Order {
+        let order_idx = self.orders.insert(Order {
             volume,
             side,
             price_level: plevel_idx,
