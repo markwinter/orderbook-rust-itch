@@ -6,7 +6,7 @@ use stable_vec::ExternStableVec;
 
 #[derive(Debug)]
 struct Order {
-    price_level: usize, // The price_level (StableVec index) this order is stored at
+    price_level: usize, // The price_level (ExternStableVec index) this order is stored at
     volume: u32,
     side: OrderSide,
 }
@@ -20,7 +20,6 @@ pub enum OrderSide {
 #[derive(Debug)]
 struct PriceLevel {
     depth: usize,
-    price: u32,
     volume: u32,
 }
 
@@ -114,11 +113,7 @@ impl OrderBook {
             plevel.depth += 1;
             plevel.volume += volume;
         } else {
-            plevel_idx = self.price_levels.push(PriceLevel {
-                price,
-                depth: 1,
-                volume,
-            });
+            plevel_idx = self.price_levels.push(PriceLevel { depth: 1, volume });
 
             list.insert(insertion_idx, (price, plevel_idx));
         }
