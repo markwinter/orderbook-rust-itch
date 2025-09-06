@@ -153,21 +153,7 @@ impl OrderBook {
         }
 
         if plevel.volume == 0 {
-            let list = if side == OrderSide::Sell {
-                &mut self.asks
-            } else {
-                &mut self.bids
-            };
-
-            for (idx, (_, slab_idx)) in list.iter_mut().enumerate().rev() {
-                if *slab_idx != plevel_slab_idx {
-                    continue;
-                }
-
-                list.remove(idx);
-                break;
-            }
-            self.price_levels.remove(plevel_slab_idx);
+            self.remove_price_level(plevel_slab_idx, side);
         }
     }
 
@@ -188,21 +174,7 @@ impl OrderBook {
         }
 
         if plevel.volume == 0 {
-            let list = if side == OrderSide::Sell {
-                &mut self.asks
-            } else {
-                &mut self.bids
-            };
-
-            for (idx, (_, slab_idx)) in list.iter_mut().enumerate().rev() {
-                if *slab_idx != plevel_slab_idx {
-                    continue;
-                }
-
-                list.remove(idx);
-                break;
-            }
-            self.price_levels.remove(plevel_slab_idx);
+            self.remove_price_level(plevel_slab_idx, side);
         }
     }
 
@@ -219,21 +191,7 @@ impl OrderBook {
         self.orders.remove(*order_slab_idx);
 
         if plevel.volume == 0 {
-            let list = if side == OrderSide::Sell {
-                &mut self.asks
-            } else {
-                &mut self.bids
-            };
-
-            for (idx, (_, slab_idx)) in list.iter_mut().enumerate().rev() {
-                if *slab_idx != plevel_slab_idx {
-                    continue;
-                }
-
-                list.remove(idx);
-                break;
-            }
-            self.price_levels.remove(plevel_slab_idx);
+            self.remove_price_level(plevel_slab_idx, side);
         }
     }
 
@@ -244,5 +202,23 @@ impl OrderBook {
 
         self.delete_order(old_order_id);
         self.add_order(new_order_id, price, volume, side);
+    }
+
+    fn remove_price_level(&mut self, plevel_slab_idx: usize, side: OrderSide) {
+        let list = if side == OrderSide::Sell {
+            &mut self.asks
+        } else {
+            &mut self.bids
+        };
+
+        for (idx, (_, slab_idx)) in list.iter_mut().enumerate().rev() {
+            if *slab_idx != plevel_slab_idx {
+                continue;
+            }
+
+            list.remove(idx);
+            break;
+        }
+        self.price_levels.remove(plevel_slab_idx);
     }
 }
