@@ -100,11 +100,14 @@ fn bench_orderbook(c: &mut Criterion) {
 
     println!("Loaded {} messages", messages.len());
 
-    c.bench_function("process itch messages", |b| {
+    let mut group = c.benchmark_group("group");
+    group.measurement_time(std::time::Duration::from_secs(20));
+    group.bench_function("process itch messages", |b| {
         b.iter(|| {
             process_messages(&mut book, &messages);
         });
     });
+    group.finish();
 }
 
 criterion_group!(benches, bench_orderbook);

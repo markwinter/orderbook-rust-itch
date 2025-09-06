@@ -6,7 +6,7 @@ use slotmap::{DefaultKey, SlotMap};
 
 #[derive(Debug)]
 struct Order {
-    price_level: DefaultKey, // The price_level (Slab index) this order is stored at
+    price_level: DefaultKey, // The price_level (SlotMap index) this order is stored at
     volume: u32,
     side: OrderSide,
 }
@@ -26,7 +26,7 @@ struct PriceLevel {
 #[derive(Debug, Default)]
 pub struct OrderBook {
     // Smallest -> Largest
-    // Tuple of price and pricelevel slab index
+    // Tuple of price and pricelevel slotmap index
     bids: Vec<(u32, DefaultKey)>,
     // Largest -> Smallest
     asks: Vec<(u32, DefaultKey)>,
@@ -42,8 +42,8 @@ impl OrderBook {
             bids: Vec::with_capacity(6000),
             asks: Vec::with_capacity(3000),
             price_levels: SlotMap::with_capacity(8000),
-            orders: SlotMap::with_capacity(160_000_000),
-            order_map: OrderMap::new(160_000_000),
+            orders: SlotMap::with_capacity(2_000_000),
+            order_map: OrderMap::new(2_000_000),
         }
     }
 
@@ -67,10 +67,9 @@ impl OrderBook {
     }
 
     pub fn spread(&self) -> Option<Decimal> {
-        let lowest_ask = self.asks.last()?.0;
-        let highest_bid = self.bids.last()?.0;
-
-        Some((Decimal::from(lowest_ask) - Decimal::from(highest_bid)) / Decimal::from(10_000))
+        let lowest_ask = self.best_ask()?;
+        let highest_bid = self.best_bid()?;
+        Some((lowest_ask - highest_bid) / Decimal::from(10_000))
     }
 
     pub fn add_order(&mut self, id: u64, price: u32, volume: u32, side: OrderSide) {
@@ -82,7 +81,6 @@ impl OrderBook {
 
         let mut found = false;
         let mut insertion_idx = 0;
-
         for (idx, (plevel_price, _)) in list.iter().enumerate().rev() {
             if price.eq(plevel_price) {
                 insertion_idx = idx;
@@ -114,7 +112,6 @@ impl OrderBook {
             plevel.volume += volume;
         } else {
             plevel_idx = self.price_levels.insert(PriceLevel { depth: 1, volume });
-
             list.insert(insertion_idx, (price, plevel_idx));
         }
 
