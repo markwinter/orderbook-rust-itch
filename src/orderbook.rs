@@ -2,11 +2,11 @@ mod ordermap;
 
 use ordermap::OrderMap;
 use rust_decimal::Decimal;
-use slab::Slab;
+use stable_vec::ExternStableVec;
 
 #[derive(Debug)]
 struct Order {
-    price_level: usize, // The price_level (Slab index) this order is stored at
+    price_level: usize, // The price_level (StableVec index) this order is stored at
     volume: u32,
     side: OrderSide,
 }
@@ -32,9 +32,8 @@ pub struct OrderBook {
     // Largest -> Smallest
     asks: Vec<(u32, usize)>,
 
-    price_levels: Slab<PriceLevel>,
-    orders: Slab<Order>,
-
+    price_levels: ExternStableVec<PriceLevel>,
+    orders: ExternStableVec<Order>,
     order_map: OrderMap,
 }
 
@@ -43,8 +42,8 @@ impl OrderBook {
         OrderBook {
             bids: Vec::with_capacity(6000),
             asks: Vec::with_capacity(3000),
-            price_levels: Slab::with_capacity(8000),
-            orders: Slab::with_capacity(160_000_000),
+            price_levels: ExternStableVec::with_capacity(8000),
+            orders: ExternStableVec::with_capacity(160_000_000),
             order_map: OrderMap::new(160_000_000),
         }
     }
@@ -53,8 +52,8 @@ impl OrderBook {
         (
             self.bids.len(),
             self.asks.len(),
-            self.price_levels.len(),
-            self.orders.len(),
+            self.price_levels.num_elements(),
+            self.orders.num_elements(),
         )
     }
 
@@ -108,33 +107,30 @@ impl OrderBook {
             }
         }
 
-        let entry = self.orders.vacant_entry();
-        let mut order = Order {
-            volume,
-            side,
-            price_level: 0,
-        };
-        self.order_map.reserve(id);
-        self.order_map.put(id, entry.key());
-
+        let plevel_idx;
         if found {
-            let plevel_idx = list[insertion_idx];
-            let plevel = self.price_levels.get_mut(plevel_idx.1).unwrap();
+            plevel_idx = list[insertion_idx].1;
+            let plevel = self.price_levels.get_mut(plevel_idx).unwrap();
             plevel.depth += 1;
             plevel.volume += volume;
-            order.price_level = plevel_idx.1;
         } else {
-            let new_plevel_idx = self.price_levels.insert(PriceLevel {
+            plevel_idx = self.price_levels.push(PriceLevel {
                 price,
                 depth: 1,
                 volume,
             });
 
-            order.price_level = new_plevel_idx;
-            list.insert(insertion_idx, (price, new_plevel_idx));
+            list.insert(insertion_idx, (price, plevel_idx));
         }
 
-        entry.insert(order);
+        let order_idx = self.orders.push(Order {
+            volume,
+            side,
+            price_level: plevel_idx,
+        });
+
+        self.order_map.reserve(id);
+        self.order_map.put(id, order_idx);
     }
 
     pub fn execute_order(&mut self, order_id: u64, volume: u32) {

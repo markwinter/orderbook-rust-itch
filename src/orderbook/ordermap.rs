@@ -24,7 +24,6 @@ impl OrderMap {
     }
 
     pub fn put(&mut self, order_id: u64, slab_index: usize) {
-        self.reserve(order_id);
         self.orders[order_id as usize] = slab_index;
     }
 }
