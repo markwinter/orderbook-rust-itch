@@ -20,15 +20,16 @@ EXECUTED_PRICE: 224
 CANCEL: 10,161
 
 ```
-process itch messages   time:   [176.45 ms 176.96 ms 177.53 ms]
-                        change: [−0.3495% +0.0917% +0.4911%] (p = 0.68 > 0.05)
+group/process itch messages
+                        time:   [172.32 ms 172.62 ms 172.95 ms]
+                        change: [−0.5854% +0.0052% +0.4086%] (p = 0.99 > 0.05)
                         No change in performance detected.
-Found 14 outliers among 100 measurements (14.00%)
-  5 (5.00%) high mild
-  9 (9.00%) high severe
+Found 10 outliers among 100 measurements (10.00%)
+  4 (4.00%) high mild
+  6 (6.00%) high severe
 ```
 
-176 ms to process 1,993,352 messages gives an average of 88 ns/message
+172 ms to process 1,993,352 messages gives an average of 86 ns/message
 
 ### Random orders
 

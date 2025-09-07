@@ -4,14 +4,8 @@ use ordermap::OrderMap;
 use rust_decimal::Decimal;
 use slotmap::{DefaultKey, SlotMap};
 
-#[derive(Debug)]
-struct Order {
-    price_level: DefaultKey, // The price_level (SlotMap index) this order is stored at
-    volume: u32,
-    side: OrderSide,
-}
-
 #[derive(Debug, PartialEq, Copy, Clone)]
+#[repr(u8)]
 pub enum OrderSide {
     Buy,
     Sell,
@@ -21,39 +15,33 @@ pub enum OrderSide {
 struct PriceLevel {
     depth: usize,
     volume: u32,
+    side: OrderSide,
 }
 
 #[derive(Debug, Default)]
 pub struct OrderBook {
-    // Smallest -> Largest
     // Tuple of price and pricelevel slotmap index
+    // Smallest -> Largest
     bids: Vec<(u32, DefaultKey)>,
     // Largest -> Smallest
     asks: Vec<(u32, DefaultKey)>,
 
     price_levels: SlotMap<DefaultKey, PriceLevel>,
-    orders: SlotMap<DefaultKey, Order>,
     order_map: OrderMap,
 }
 
 impl OrderBook {
     pub fn new() -> Self {
         OrderBook {
-            bids: Vec::with_capacity(6000),
-            asks: Vec::with_capacity(3000),
-            price_levels: SlotMap::with_capacity(8000),
-            orders: SlotMap::with_capacity(2_000_000),
+            bids: Vec::with_capacity(10_000),
+            asks: Vec::with_capacity(10_000),
+            price_levels: SlotMap::with_capacity(10_000),
             order_map: OrderMap::new(2_000_000),
         }
     }
 
-    pub fn meta(&self) -> (usize, usize, usize, usize) {
-        (
-            self.bids.len(),
-            self.asks.len(),
-            self.price_levels.len(),
-            self.orders.len(),
-        )
+    pub fn meta(&self) -> (usize, usize, usize) {
+        (self.bids.len(), self.asks.len(), self.price_levels.len())
     }
 
     pub fn best_bid(&self) -> Option<Decimal> {
@@ -111,82 +99,63 @@ impl OrderBook {
             plevel.depth += 1;
             plevel.volume += volume;
         } else {
-            plevel_idx = self.price_levels.insert(PriceLevel { depth: 1, volume });
+            plevel_idx = self.price_levels.insert(PriceLevel {
+                depth: 1,
+                volume,
+                side,
+            });
             list.insert(insertion_idx, (price, plevel_idx));
         }
 
-        let order_idx = self.orders.insert(Order {
-            volume,
-            side,
-            price_level: plevel_idx,
-        });
-
-        self.order_map.reserve(id);
-        self.order_map.put(id, order_idx);
+        self.order_map.put(id, (plevel_idx, volume));
     }
 
     pub fn execute_order(&mut self, order_id: u64, volume: u32) {
-        let order_slab_idx = self.order_map.get(order_id).unwrap();
-        let order = self.orders.get_mut(*order_slab_idx).unwrap();
-        let side = order.side;
-        order.volume -= volume;
+        let (plevel_idx, _) = self.order_map.get(order_id).unwrap();
 
-        let plevel_slab_idx = order.price_level;
-        let plevel = self.price_levels.get_mut(plevel_slab_idx).unwrap();
+        let plevel = self.price_levels.get_mut(*plevel_idx).unwrap();
+        let side = plevel.side;
         plevel.volume -= volume;
 
-        if order.volume == 0 {
-            plevel.depth -= 1;
-            self.orders.remove(*order_slab_idx);
+        if plevel.volume == 0 {
+            self.remove_price_level(*plevel_idx, side);
         }
 
-        if plevel.volume == 0 {
-            self.remove_price_level(plevel_slab_idx, side);
-        }
+        self.order_map.reduce_volume(order_id, volume);
     }
 
     pub fn cancel_order(&mut self, order_id: u64, volume: u32) {
-        let order_slab_idx = self.order_map.get(order_id).unwrap();
-        let order = self.orders.get_mut(*order_slab_idx).unwrap();
-        let side = order.side;
-        order.volume -= volume;
+        let (plevel_idx, _) = self.order_map.get(order_id).unwrap();
 
-        let plevel_slab_idx = order.price_level;
-        let plevel = self.price_levels.get_mut(plevel_slab_idx).unwrap();
+        let plevel = self.price_levels.get_mut(*plevel_idx).unwrap();
+        let side = plevel.side;
         plevel.volume -= volume;
 
-        if order.volume == 0 {
-            plevel.depth -= 1;
-
-            self.orders.remove(*order_slab_idx);
-        }
-
         if plevel.volume == 0 {
-            self.remove_price_level(plevel_slab_idx, side);
+            self.remove_price_level(*plevel_idx, side);
         }
+
+        self.order_map.reduce_volume(order_id, volume);
     }
 
     pub fn delete_order(&mut self, order_id: u64) {
-        let order_slab_idx = self.order_map.get(order_id).unwrap();
-        let order = self.orders.get_mut(*order_slab_idx).unwrap();
-        let side = order.side;
+        let (plevel_idx, order_volume) = self.order_map.get(order_id).unwrap();
 
-        let plevel_slab_idx = order.price_level;
-        let plevel = self.price_levels.get_mut(plevel_slab_idx).unwrap();
-        plevel.volume -= order.volume;
+        let plevel = self.price_levels.get_mut(*plevel_idx).unwrap();
+        let side = plevel.side;
+        plevel.volume -= order_volume;
         plevel.depth -= 1;
 
-        self.orders.remove(*order_slab_idx);
-
         if plevel.volume == 0 {
-            self.remove_price_level(plevel_slab_idx, side);
+            self.remove_price_level(*plevel_idx, side);
         }
     }
 
     pub fn replace_order(&mut self, old_order_id: u64, new_order_id: u64, price: u32, volume: u32) {
-        let order_slab_idx = self.order_map.get(old_order_id).unwrap();
-        let order = self.orders.get(*order_slab_idx).unwrap();
-        let side = order.side;
+        let (plevel_idx, _) = self.order_map.get(old_order_id).unwrap();
+
+        let plevel = self.price_levels.get_mut(*plevel_idx).unwrap();
+        let side = plevel.side;
 
         self.delete_order(old_order_id);
         self.add_order(new_order_id, price, volume, side);
